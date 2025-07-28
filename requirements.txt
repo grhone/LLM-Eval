@@ -1,0 +1,10 @@
+pandas
+pyyaml
+langchain
+langchain-community
+langchain-google-genai
+tqdm
+pyarrow
+openai
+anthropic
+google-generativeai
