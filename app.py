@@ -44,18 +44,19 @@ def create_model(model_config):
     model_name = model_config["model_name"]
 
     if provider == "openai":
-        return ChatOpenAI(model_name=model_name, openai_api_key=model_config["api_key"])
+        return ChatOpenAI(model_name=model_name, openai_api_key=model_config["api_key"], max_tokens=model_config["max_tokens"])
     elif provider == "anthropic":
         return ChatAnthropic(model_name=model_name, anthropic_api_key=model_config["api_key"])
     elif provider == "ollama":
-        return ChatOllama(model=model_name, base_url=model_config["base_url"], num_ctx=5000, num_predict=1000)
+        return ChatOllama(model=model_name, base_url=model_config["base_url"], num_ctx=5000, num_predict=model_config["max_tokens"])
     elif provider == "gemini":
-        return ChatGoogleGenerativeAI(model=model_name, google_api_key=model_config["api_key"], max_tokens=2000)
+        return ChatGoogleGenerativeAI(model=model_name, google_api_key=model_config["api_key"], max_tokens=model_config["max_tokens"])
     elif provider == "openrouter":
         return ChatOpenAI(
             model_name=model_name,
             openai_api_key=model_config["api_key"],
             openai_api_base="https://openrouter.ai/api/v1",
+            max_tokens=model_config["max_tokens"]
         )
     else:
         raise ValueError(f"Unsupported model provider: {provider}")
@@ -93,9 +94,18 @@ def main():
     # Create the judge model
     judge_model = create_model(judge_model_config)
 
-    # Load the data
-    #TODO: Make this dynamic
-    df = pd.read_parquet("data/train-00000-of-00001.parquet")
+    # Load the data from HuggingFace
+    from datasets import load_dataset
+    from dotenv import load_dotenv
+    import os
+    
+    load_dotenv()
+    dataset_name = os.getenv("DATASET_NAME")
+    dataset_subset = os.getenv("DATASET_SUBSET")
+    
+    dataset = load_dataset(dataset_name, name=dataset_subset, split="train")
+    df = dataset.to_pandas()
+    print(f"Loaded dataset {dataset_name}/{dataset_subset} with {len(df)} rows")
 
     results = []
 
@@ -164,32 +174,42 @@ def main():
 
     # Calculate and display the results
     print("\n--- Benchmark Results ---")
-    for model_config in benchmark_models_config:
-        model_name = model_config["model_name"]
-        model_results = results_df[results_df["model_name"] == model_name]
-        
-        if not model_results.empty:
-            # Convert 'judge_score' to numeric, coercing errors to NaN
-            model_results["judge_score"] = pd.to_numeric(model_results["judge_score"], errors='coerce')
-            
-            # Drop rows where 'judge_score' is NaN
-            model_results.dropna(subset=['judge_score'], inplace=True)
+    with open("benchmark_results.txt", "w") as f:
+        f.write("--- Benchmark Results ---\n")
+        for model_config in benchmark_models_config:
+            model_name = model_config["model_name"]
+            model_results = results_df[results_df["model_name"] == model_name]
             
             if not model_results.empty:
-                total_questions = len(model_results)
-                correct_answers = model_results["judge_score"].sum()
-                accuracy = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+                # Convert 'judge_score' to numeric, coercing errors to NaN
+                model_results["judge_score"] = pd.to_numeric(model_results["judge_score"], errors='coerce')
+                
+                # Drop rows where 'judge_score' is NaN
+                model_results.dropna(subset=['judge_score'], inplace=True)
+                
+                if not model_results.empty:
+                    total_questions = len(model_results)
+                    correct_answers = model_results["judge_score"].sum()
+                    accuracy = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
 
-                print(f"\nModel: {model_name}")
-                print(f"  - Total Questions: {total_questions}")
-                print(f"  - Correct Answers: {int(correct_answers)}")
-                print(f"  - Accuracy: {accuracy:.2f}%")
+                    print(f"\nModel: {model_name}")
+                    f.write(f"\nModel: {model_name}\n")
+                    print(f"  - Total Questions: {total_questions}")
+                    f.write(f"  - Total Questions: {total_questions}\n")
+                    print(f"  - Correct Answers: {int(correct_answers)}")
+                    f.write(f"  - Correct Answers: {int(correct_answers)}\n")
+                    print(f"  - Accuracy: {accuracy:.2f}%")
+                    f.write(f"  - Accuracy: {accuracy:.2f}%\n")
+                else:
+                    print(f"\nModel: {model_name}")
+                    f.write(f"\nModel: {model_name}\n")
+                    print("  - No valid judge scores found.")
+                    f.write("  - No valid judge scores found.\n")
             else:
                 print(f"\nModel: {model_name}")
-                print("  - No valid judge scores found.")
-        else:
-            print(f"\nModel: {model_name}")
-            print("  - No results found for this model.")
+                f.write(f"\nModel: {model_name}\n")
+                print("  - No results found for this model.")
+                f.write("  - No results found for this model.\n")
 
 if __name__ == "__main__":
     main()
