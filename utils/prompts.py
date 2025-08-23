@@ -143,11 +143,8 @@ ZEROSHOT_QA_USER_PROMPT = """Answer the following question:
 {question}
 </question>
 
-Enclose your full answer in <answer> XML tags. For example:
-
-<answer>
-[your answer here]
-</answer>"""
+The answer should be plain text and have a maximum of 3 sentences.
+"""
 
 
 def get_zeroshot_qa_prompt(question: str):
@@ -159,6 +156,5 @@ def get_zeroshot_qa_prompt(question: str):
     Returns:
         str: Formatted prompt instructing model to:
             - Answer the question
-            - Enclose response in <answer> XML tags
     """
     return ZEROSHOT_QA_USER_PROMPT.format(question=question)

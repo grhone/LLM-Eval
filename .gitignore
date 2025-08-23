@@ -207,3 +207,4 @@ config.yaml
 output_data.csv 
 parquet-to-csv.py 
 benchmark_results.csv
+results/

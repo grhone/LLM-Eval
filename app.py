@@ -122,14 +122,23 @@ def main():
             chunks = row.get("chunks", [])  # Optional field
             combined_chunks = "\n".join(chunks) if isinstance(chunks, list) else ""
 
-            # Generate an answer using the model to be benchmarked
-            try:
-                qa_prompt = get_zeroshot_qa_prompt(question)
-                raw_answer = model_to_benchmark.predict(qa_prompt)
-                # Extract the answer from the XML tags
-                model_answer = raw_answer.split("<answer>")[1].split("</answer>")[0].strip()
-            except Exception as e:
-                model_answer = f"Error generating answer: {e}"
+            # Generate an answer using the model to be benchmarked (with retries)
+            model_answer = "Error: Max attempts reached"
+            for attempt in range(5):
+                try:
+                    qa_prompt = get_zeroshot_qa_prompt(question)
+                    model_answer = model_to_benchmark.predict(qa_prompt)
+                    
+                    # Check if response is empty and retry if needed
+                    if not model_answer or model_answer.strip() == "":
+                        print(f"Empty response for question '{question[:50]}...' (attempt {attempt + 1}), retrying...")
+                        continue
+                    
+                    break  # Success, exit loop
+                except Exception as e:
+                    model_answer = f"Error generating answer (attempt {attempt + 1}): {e}"
+                    print(f"Error generating answer for question '{question[:50]}...' (attempt {attempt + 1}): {e}")
+                    continue
 
             # Use the judge model to evaluate the answer
             judge_prompt = get_judge_prompt(
@@ -141,7 +150,7 @@ def main():
             )
             
             final_answer = "Error: Max retries reached"
-            for attempt in range(3):  # Retry up to 3 times
+            for attempt in range(5):  # Retry up to 5 times
                 try:
                     judge_response = judge_model.invoke(judge_prompt)
                     # Extract the final answer from the XML tags
